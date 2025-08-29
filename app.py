@@ -7,16 +7,13 @@ import pydeck as pdk
 from typing import Dict, List, Tuple
 from xml.etree import ElementTree as ET
 from math import radians, cos, sin, asin, sqrt
-import pathlib, zipfile, io, re, random
+import pathlib, zipfile, io, re, random, json
 
+# ---------- Config & styles ----------
 st.set_page_config(page_title="Peores Rutas — CDMX", page_icon="🚇", layout="wide")
-
-# ===== UI =====
-STYLE = """
+st.markdown("""
 <style>
-:root{
-  --bg:#0a0f1c; --panel:#0f1630; --ink:#e5ecff; --muted:#9fb2ff; --line:#22305b; --chip:#101a3a;
-}
+:root{ --bg:#0a0f1c; --panel:#0f1630; --ink:#e5ecff; --muted:#9fb2ff; --line:#22305b; --chip:#101a3a;}
 html,body,[data-testid="stAppViewContainer"]{background:var(--bg); color:var(--ink)}
 [data-testid="stSidebar"]{background:linear-gradient(180deg,#0b1228 0%, #091024 100%)}
 .block-title{font-weight:900;font-size:1.9rem;margin:.1rem 0 .4rem}
@@ -29,32 +26,30 @@ html,body,[data-testid="stAppViewContainer"]{background:var(--bg); color:var(--i
 hr{border:none;border-top:1px solid var(--line);margin:1rem 0}
 a{color:#7dd3fc}
 </style>
-"""
-st.markdown(STYLE, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
-# ===== Paths =====
+# ---------- Paths ----------
 DATA_DIR = pathlib.Path("data")
 KML_PATH = DATA_DIR / "Movilidad Integrada ZMVM(1).kml"
 CSV_METRO = DATA_DIR / "metro.csv"
+TRIVIA_JSON = DATA_DIR / "trivia.json"
 
-# ===== Colors =====
+# ---------- Colors ----------
 LINE_COLORS = {
-    # Metro
     "L1":"#F05A91","L2":"#0055A5","L3":"#8CC63E","L4":"#00B5E2","L5":"#FFC20E","L6":"#E10600",
     "L7":"#F39C12","L8":"#00A859","L9":"#8B5E3C","L12":"#C8B273","A":"#7F3FBF","B":"#7AC142",
-    # Metrobus
     "MB1":"#C62828","MB2":"#1565C0","MB3":"#2E7D32","MB4":"#EF6C00","MB5":"#6A1B9A","MB6":"#00838F","MB7":"#795548",
-    # Cablebus
-    "CB1":"#00ACC1","CB2":"#26A69A",
-    # Trolebus
-    "TB1":"#9C27B0","TB2":"#7B1FA2","TB3":"#8E24AA","TB4":"#6A1B9A",
-    # Tren Ligero / otros
-    "TL":"#00A651","SUB":"#455A64","MXB":"#9E9D24","RTP":"#90A4AE",
-    "DEFAULT":"#8894c7"
+    "CB1":"#00ACC1","CB2":"#26A69A","TB1":"#9C27B0","TB2":"#7B1FA2","TB3":"#8E24AA","TB4":"#6A1B9A",
+    "TL":"#00A651","SUB":"#455A64","MXB":"#9E9D24","RTP":"#90A4AE","DEFAULT":"#8894c7"
 }
 SERVICE_COLOR = {"METRO":"#ED5480","METROBUS":"#E53935","CABLEBUS":"#26C6DA","TROLEBUS":"#B388FF","TREN LIGERO":"#00A651","SUBURBANO":"#455A64","MEXIBUS":"#C0CA33","RTP":"#90A4AE","OTROS":"#8894c7"}
 
-# ===== Utils =====
+# ---------- Helpers ----------
+def _norm(s:str)->str:
+    s = s.lower()
+    s = s.replace("í","i").replace("á","a").replace("é","e").replace("ó","o").replace("ú","u").replace("ü","u")
+    return s
+
 def hav_km(a: Tuple[float,float], b: Tuple[float,float]) -> float:
     lat1, lon1 = a; lat2, lon2 = b
     lon1, lat1, lon2, lat2 = map(radians, [lon1,lat1,lon2,lat2])
@@ -62,17 +57,12 @@ def hav_km(a: Tuple[float,float], b: Tuple[float,float]) -> float:
     c = 2 * asin(sqrt(sin(dlat/2)**2 + cos(lat1)*cos(lat2)*(sin(dlon/2)**2)))
     return r * c
 
-def _norm(s:str) -> str:
-    s = s.lower()
-    s = s.replace("í","i").replace("á","a").replace("é","e").replace("ó","o").replace("ú","u").replace("ü","u")
-    return s
-
 def detect_service(text: str) -> str:
     t = _norm(text)
     if "metrobus" in t or "metrobús" in t: return "METROBUS"
-    if "cablebus" in t or "cablebus" in t: return "CABLEBUS"
+    if "cablebus" in t: return "CABLEBUS"
     if "trolebus" in t: return "TROLEBUS"
-    if "tren ligero" in t or "trenligero" in t or "tl" == t.strip(): return "TREN LIGERO"
+    if "tren ligero" in t or "trenligero" in t or t.strip()=="tl": return "TREN LIGERO"
     if "suburbano" in t: return "SUBURBANO"
     if "mexibus" in t: return "MEXIBUS"
     if "rtp" in t: return "RTP"
@@ -98,7 +88,7 @@ def canonical_line(service: str, name: str) -> str:
     if service=="RTP": return "RTP"
     return None
 
-# ===== DEMO (fallback) =====
+# ---------- DEMO fallback ----------
 LINES_DEMO = {
     "L1":["Observatorio","Tacubaya","Juanacatlán","Chapultepec","Sevilla","Insurgentes","Cuauhtémoc","Balderas",
           "Salto del Agua","Isabel la Católica","Pino Suárez","Merced","Candelaria","San Lázaro","Moctezuma",
@@ -114,7 +104,7 @@ def build_graph_demo():
     for n in G.nodes(): G.nodes[n]["is_transfer"] = (G.degree[n]>=3)
     return G, {}
 
-# ===== KML parsing (hierarchy-aware) =====
+# ---------- KML ----------
 KML_NS = {"kml":"http://www.opengis.net/kml/2.2"}
 
 @st.cache_data(show_spinner=False)
@@ -122,7 +112,7 @@ def read_kml_text(path: pathlib.Path) -> str:
     data = path.read_bytes()
     if data[:2]==b"PK":
         with zipfile.ZipFile(io.BytesIO(data)) as zf:
-            name=next((n for n in zf.namelist() if n.lower().endswith(".kml")),None)
+            name = next((n for n in zf.namelist() if n.lower().endswith(".kml")), None)
             if not name: return ""
             return zf.read(name).decode("utf-8","ignore")
     return data.decode("utf-8","ignore")
@@ -131,20 +121,15 @@ def _walk(el, trail, out_pm):
     name_el = el.find("kml:name", KML_NS)
     label = name_el.text.strip() if name_el is not None and name_el.text else None
     t2 = trail + ([label] if label else [])
-    for pm in el.findall("kml:Placemark", KML_NS):
-        out_pm.append((t2, pm))
-    for sub in el.findall("kml:Folder", KML_NS):
-        _walk(sub, t2, out_pm)
+    for pm in el.findall("kml:Placemark", KML_NS): out_pm.append((t2, pm))
+    for sub in el.findall("kml:Folder", KML_NS): _walk(sub, t2, out_pm)
 
 def parse_kml_with_services(kml_text: str):
     if not kml_text: return [], []
-    try:
-        root = ET.fromstring(kml_text)
-    except Exception:
-        return [], []
+    try: root = ET.fromstring(kml_text)
+    except Exception: return [], []
     doc = root.find(".//kml:Document", KML_NS) or root
-    items = []
-    _walk(doc, [], items)
+    items=[]; _walk(doc, [], items)
     stations, lines = [], []
     for trail, pm in items:
         name_el = pm.find("kml:name", KML_NS)
@@ -185,8 +170,8 @@ def snap_lines_to_stations(stations: List[Dict], lines: List[Dict], snap_thresho
             if d<=snap_threshold_m and (not seq or seq[-1]!=n): seq.append(n)
         for u,v in zip(seq[:-1], seq[1:]):
             if u!=v:
-                dist_m = hav_km((stations[names.index(u)]["lat"], stations[names.index(u)]["lon"]),
-                                (stations[names.index(v)]["lat"], stations[names.index(v)]["lon"])) * 1000.0
+                su = stations[names.index(u)]; sv = stations[names.index(v)]
+                dist_m = hav_km((su["lat"],su["lon"]),(sv["lat"],sv["lon"])) * 1000.0
                 code = canonical_line(L["service"], L["name"])
                 edges.append((u, v, dist_m, code, L["service"]))
     return edges
@@ -195,26 +180,25 @@ def build_graph_from_edges(stations: List[Dict], edges):
     G = nx.Graph()
     used = set([u for u,_,_,_,_ in edges] + [v for _,v,_,_,_ in edges])
     for s in stations:
-        if s["name"] in used:
-            G.add_node(s["name"], lat=s["lat"], lon=s["lon"])
+        if s["name"] in used: G.add_node(s["name"], lat=s["lat"], lon=s["lon"])
     for u,v,w,code,svc in edges:
-        if not G.has_node(u) or not G.has_node(v): continue
+        if not (G.has_node(u) and G.has_node(v)): continue
         if G.has_edge(u,v):
             G[u][v]["length_m"] = min(G[u][v]["length_m"], w)
-            G[u][v].setdefault("lines", set()).add(code) if code else None
-            if "service" not in G[u][v]: G[u][v]["service"] = svc
+            if code: G[u][v].setdefault("lines", set()).add(code)
         else:
-            G.add_edge(u, v, length_m=float(w), lines=set([code]) if code else set(), service=svc)
+            G.add_edge(u,v,length_m=float(w), lines=set([code]) if code else set(), service=svc)
     for n in G.nodes(): G.nodes[n]["is_transfer"] = (G.degree[n] >= 3)
     return G
 
-# ===== CSV metro (distancias oficiales) =====
+# ---------- CSV Metro: longitudes ----------
 def _normalize_cols(df: pd.DataFrame) -> pd.DataFrame:
-    cols=[]; 
+    cols=[]
     for c in df.columns:
         x=str(c).strip().lower()
-        x=re.sub(r'[áàä]','a',x); x=re.sub(r'[éèë]','e',x); x=re.sub(r'[íìï]','i',x)
-        x=re.sub(r'[óòö]','o',x); x=re.sub(r'[úùü]','u',x); x=x.replace("ñ","n")
+        x=re.sub(r'[áàä]','a',x); x=re.sub(r'[éèë]','e',x)
+        x=re.sub(r'[íìï]','i',x); x=re.sub(r'[óòö]','o',x)
+        x=re.sub(r'[úùü]','u',x); x=x.replace("ñ","n")
         x=re.sub(r'[^a-z0-9_]+','_',x).strip('_'); cols.append(x)
     df.columns=cols; return df
 
@@ -223,7 +207,7 @@ def merge_lengths_from_csv(G: nx.Graph, csv_path: pathlib.Path) -> int:
     df = pd.read_csv(csv_path, sep=None, engine="python")
     df = _normalize_cols(df)
     len_col = next((c for c in df.columns if "long" in c), None)
-    def to_m(x): 
+    def to_m(x):
         s=str(x).replace(",","").replace(" m","").strip()
         try: return float(s)
         except: return np.nan
@@ -235,7 +219,38 @@ def merge_lengths_from_csv(G: nx.Graph, csv_path: pathlib.Path) -> int:
             G[u][v]["length_m"] = float(r["__m__"]); cnt += 1
     return cnt
 
-# ===== Build graph (with service filter) =====
+# ---------- Trivia ----------
+def load_trivia():
+    if TRIVIA_JSON.exists():
+        try:
+            return json.loads(TRIVIA_JSON.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    # ejemplos base (puedes editarlos en data/trivia.json)
+    return [
+        {"title":"Aventura en patrulla", "type":"anécdota",
+         "station":"Terminal Aérea", "service":"METRO",
+         "text":"Se dice que al tiktoker JEZZINI lo tuvieron que llevar en patrulla por una inundación cerca de Terminal Aérea.",
+         "source":"aportado por usuario", "verificado": False},
+        {"title":"Rescate en moto", "type":"anécdota",
+         "station":"Auditorio", "service":"METRO",
+         "text":"Otra vez, por lluvia fuerte, lo transportaron en moto cerca de Auditorio Nacional.",
+         "source":"aportado por usuario", "verificado": False},
+        {"title":"La señora ‘cara de perro’", "type":"leyenda",
+         "station":"Merced", "service":"METRO",
+         "text":"Leyenda urbana: aparece una señora con ‘cara de perro’ en la estación Merced.",
+         "source":"folklore urbano", "verificado": False},
+        {"title":"OVNIs en CU", "type":"leyenda",
+         "station":"Universidad", "service":"METRO",
+         "text":"Historias de luces raras/OVNIs cerca de CU y la terminal del Metro.",
+         "source":"folklore urbano", "verificado": False},
+    ]
+
+def trivia_for_path(trivia_list, path):
+    stns = set(path or [])
+    return [t for t in trivia_list if (t.get("station") in stns)]
+
+# ---------- Build graph (with service filter) ----------
 @st.cache_data(show_spinner=True)
 def build_graph_filtered(services_selected: List[str], snap_threshold_m: float = 150.0):
     if KML_PATH.exists():
@@ -249,11 +264,10 @@ def build_graph_filtered(services_selected: List[str], snap_threshold_m: float =
             merge_lengths_from_csv(G, CSV_METRO)
         coords = {n:(G.nodes[n].get("lat"), G.nodes[n].get("lon")) for n in G.nodes()}
         return G, coords, len(stns), len(edges)
-    # fallback demo
     G, coords = build_graph_demo()
     return G, coords, G.number_of_nodes(), G.number_of_edges()
 
-# ===== Metrics & routing =====
+# ---------- Metrics & routing ----------
 def compute_metrics(G: nx.Graph, path: List[str], base_min=2.0, transfer_penalty=5.0, speed_kmh=32.0):
     e = list(zip(path[:-1], path[1:])); dist=0.0; seq=[]
     for u,v in e:
@@ -287,13 +301,11 @@ def enumerate_paths_worst(G: nx.Graph, src: str, dst: str, mode: str, cutoff: in
     df = pd.DataFrame([{"rank":i+1,"score":s,"tiempo_min":m["time_min"],"transbordos":m["transfers"],"estaciones":m["edges"],"dist_km":m["dist_km"],"ruta":" → ".join(p)} for i,(s,p,m) in enumerate(top)])
     return scored[0][1], scored[0][2], [p for _,p,_ in scored[:5]], df
 
-# ===== Layout & plots (no SciPy) =====
+# ---------- Layouts (sin SciPy) ----------
 def get_layout(G: nx.Graph, method: str):
     try:
-        if method=="Kamada-Kawai":
-            return nx.kamada_kawai_layout(G)
-        if method=="Circular":
-            return nx.circular_layout(G)
+        if method=="Kamada-Kawai": return nx.kamada_kawai_layout(G)
+        if method=="Circular": return nx.circular_layout(G)
         return nx.random_layout(G, seed=42)
     except Exception:
         return nx.random_layout(G, seed=42)
@@ -337,7 +349,7 @@ def plot_geo(path: List[str], coords: Dict[str,Tuple[float,float]], step:int=Non
     if not path or not coords: st.info("Carga KML para mapa geográfico."); return
     if not all(s in coords and coords[s][0] and coords[s][1] for s in path): st.info("Faltan coords para alguna estación."); return
     pts=[{"name":s,"lat":coords[s][0],"lon":coords[s][1]} for s in path[:(step or len(path))]]
-    segs=[]; 
+    segs=[]
     for u,v in zip(path[:(step or len(path))][:-1], path[:(step or len(path))][1:]):
         a,b=coords[u],coords[v]; segs.append({"path":[[a[1],a[0]],[b[1],b[0]]]})
     view=pdk.ViewState(latitude=pts[0]["lat"], longitude=pts[0]["lon"], zoom=11)
@@ -345,48 +357,50 @@ def plot_geo(path: List[str], coords: Dict[str,Tuple[float,float]], step:int=Non
     layer_path=pdk.Layer("PathLayer", data=segs, get_path="path", get_width=5, get_color=[255,255,255])
     st.pydeck_chart(pdk.Deck(layers=[layer_path,layer_pts], initial_view_state=view, tooltip={"text":"{name}"}))
 
-# ===== UI =====
+# ---------- UI ----------
 st.markdown('<div class="block-title">Peores Rutas — CDMX</div>', unsafe_allow_html=True)
-st.markdown('<div class="subtle">Filtra por servicio (Metro, Metrobús, Cablebús, etc.) y calcula la <span class="badge">peor</span> ruta por tiempo, transbordos, estaciones o distancia.</div>', unsafe_allow_html=True)
+st.markdown('<div class="subtle">Filtra por servicio y calcula la <span class="badge">peor</span> ruta por tiempo, transbordos, estaciones o distancia. Incluye trivias divertidas en tu trayecto.</div>', unsafe_allow_html=True)
 
 with st.sidebar:
     st.markdown("### 🚦 Servicios incluidos")
     services_all = ["METRO","METROBUS","CABLEBUS","TROLEBUS","TREN LIGERO","SUBURBANO","MEXIBUS","RTP"]
     services_sel = st.multiselect("Selecciona servicios", services_all, default=["METRO"])
-    snap_m = st.slider("Umbral de 'encaje' KML→estación (m)", 60, 300, 150, 10)
+    snap_m = st.slider("Encaje KML→estación (m)", 60, 300, 150, 10)
     st.markdown("### ⚙️ Parámetros")
     speed_kmh = st.slider("Velocidad (km/h)", 24, 45, 32)
     base_min = st.slider("Minutos por tramo (fallback)", 1.0, 5.0, 2.0, .5)
     penalty = st.slider("Penalización por transbordo (min)", 1.0, 12.0, 5.0, .5)
     cutoff = st.slider("Máx. estaciones por ruta", 10, 60, 28, 1)
     limitp = st.slider("Máx. rutas a evaluar", 200, 3000, 1200, 100)
-    layout_method = st.selectbox("Layout del grafo (sin SciPy)", ["Kamada-Kawai","Circular","Random"])
-    st.markdown("### 🎨 Líneas visibles")
-    # Se llena después de construir el grafo
+    layout_method = st.selectbox("Layout del grafo", ["Kamada-Kawai","Circular","Random"])
 
-# Build graph con filtro
 G, coords, n_stations, n_edges = build_graph_filtered(services_sel, snap_threshold_m=snap_m)
-
 if G.number_of_nodes()==0:
     st.error("No se pudo construir la red. Verifica data/Movilidad Integrada ZMVM(1).kml y data/metro.csv")
     st.stop()
 
 all_line_codes = sorted({ln for _,_,d in G.edges(data=True) for ln in (d.get("lines") or set()) if ln})
-hide_lines = st.sidebar.multiselect("Ocultar líneas", all_line_codes, [])
+hide_lines = st.sidebar.multiselect("🎨 Ocultar líneas", all_line_codes, [])
 
 stations_all = sorted(G.nodes())
+if "src" not in st.session_state: st.session_state["src"] = stations_all[0]
+if "dst" not in st.session_state: st.session_state["dst"] = stations_all[min(1, len(stations_all)-1)]
+
 c1,c2,c3,c4,c5 = st.columns([2,2,2,2,1])
 with c1:
-    src = st.selectbox("Origen", stations_all, index=0)
+    src = st.selectbox("Origen", stations_all, index=stations_all.index(st.session_state["src"]) if st.session_state["src"] in stations_all else 0, key="src")
 with c2:
-    dst = st.selectbox("Destino", stations_all, index=min(1,len(stations_all)-1))
+    dst = st.selectbox("Destino", stations_all, index=stations_all.index(st.session_state["dst"]) if st.session_state["dst"] in stations_all else min(1,len(stations_all)-1), key="dst")
 with c3:
     mode = st.radio("Criterio", ["Más tiempo","Más transbordos","Más estaciones","Más distancia"], horizontal=True)
 with c4:
     anim = st.toggle("Animación", value=True)
 with c5:
-    if st.button("🎲 Random"):
-        src = random.choice(stations_all); dst = random.choice([s for s in stations_all if s!=src])
+    btn_random = st.button("🎲")
+    if btn_random:
+        st.session_state["src"] = random.choice(stations_all)
+        st.session_state["dst"] = random.choice([s for s in stations_all if s!=st.session_state["src"]])
+        st.experimental_rerun()
 
 st.markdown(
     f"<div class='kpi card'>"
@@ -397,13 +411,16 @@ st.markdown(
     f"</div>", unsafe_allow_html=True
 )
 
-go = st.button("🔎 Calcular peor ruta", type="primary", use_container_width=True)
+btn_calc = st.button("🔎 Calcular peor ruta", type="primary", use_container_width=True)
 
-if go:
-    if src==dst:
+if btn_calc:
+    if st.session_state["src"]==st.session_state["dst"]:
         st.warning("Elige estaciones distintas.")
     else:
-        path, met, top5, df_top = enumerate_paths_worst(G, src, dst, mode, int(cutoff), int(limitp), float(base_min), float(penalty), float(speed_kmh))
+        path, met, top5, df_top = enumerate_paths_worst(
+            G, st.session_state["src"], st.session_state["dst"], mode, int(cutoff), int(limitp),
+            float(base_min), float(penalty), float(speed_kmh)
+        )
         if not path:
             st.error("No encontré rutas con los parámetros actuales.")
         else:
@@ -423,11 +440,11 @@ if go:
                     if ln: chips.append(f"<span class='badge' style='border-color:#2a3a77'>{ln}</span>")
                 st.markdown("**Líneas**")
                 st.markdown((" ".join(chips)) if chips else "<span class='subtle'>sin etiquetas</span>", unsafe_allow_html=True)
-                st.download_button("⬇️ Descargar ruta (CSV)",
+                st.download_button("⬇️ Ruta CSV",
                     pd.DataFrame({"paso":range(1,len(path)+1),"estacion":path}).to_csv(index=False).encode("utf-8"),
                     "ruta.csv","text/csv")
 
-            tabs = st.tabs(["🕸️ Topológico","🗺️ Geográfico","🏆 Top 10 peores"])
+            tabs = st.tabs(["🕸️ Topológico","🗺️ Geográfico","🏆 Top 10 peores","🎭 Trivias en la ruta"])
             with tabs[0]:
                 plot_topological(G, highlight=path, hide_lines=hide_lines, layout_method=layout_method)
             with tabs[1]:
@@ -435,5 +452,17 @@ if go:
                 plot_geo(path, coords, step=step)
             with tabs[2]:
                 st.dataframe(df_top, use_container_width=True)
+            with tabs[3]:
+                trivia_list = load_trivia()
+                rel = trivia_for_path(trivia_list, path)
+                if not rel:
+                    st.info("No hay trivias asociadas a estaciones de esta ruta. Agrega más en data/trivia.json.")
+                else:
+                    for t in rel:
+                        verif = "✅" if t.get("verificado") else "🌀"
+                        st.markdown(f"**{t['title']}** {verif} — *{t.get('type','')}, {t.get('service','')}*  \n"
+                                    f"**Estación:** {t.get('station','—')}  \n"
+                                    f"{t.get('text','')}  \n"
+                                    f"<span class='subtle'>Fuente: {t.get('source','—')}</span>", unsafe_allow_html=True)
 else:
     st.info("Elige origen/destino, ajusta parámetros y pulsa **Calcular peor ruta**.")
