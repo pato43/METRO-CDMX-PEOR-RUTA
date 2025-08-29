@@ -1,0 +1,38 @@
+[
+  {
+    "title": "Aventura en patrulla",
+    "type": "anécdota",
+    "station": "Terminal Aérea",
+    "service": "METRO",
+    "text": "Se dice que al tiktoker JEZZINI lo llevaron en patrulla por una inundación cerca de Terminal Aérea.",
+    "source": "aporte de usuario",
+    "verificado": false
+  },
+  {
+    "title": "Rescate en moto a JEZZINI",
+    "type": "anécdota",
+    "station": "Auditorio",
+    "service": "METRO",
+    "text": "Por lluvia fuerte, lo transportaron en moto cerca de Auditorio Nacional.",
+    "source": "aporte de usuario",
+    "verificado": false
+  },
+  {
+    "title": "La señora ‘cara de perro’",
+    "type": "leyenda",
+    "station": "Merced",
+    "service": "METRO",
+    "text": "Leyenda urbana famosa asociada a la estación Merced.",
+    "source": "folklore urbano",
+    "verificado": false
+  },
+  {
+    "title": "OVNIs en CU",
+    "type": "leyenda",
+    "station": "Universidad",
+    "service": "METRO",
+    "text": "Relatos de avistamientos extraños cerca de CU.",
+    "source": "folklore urbano",
+    "verificado": false
+  }
+]
