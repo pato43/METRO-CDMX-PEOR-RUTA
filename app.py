@@ -9,8 +9,9 @@ from xml.etree import ElementTree as ET
 from math import radians, cos, sin, asin, sqrt
 import pathlib, zipfile, io, re, random, json
 
-# ---------- Config & styles ----------
 st.set_page_config(page_title="Peores Rutas — CDMX", page_icon="🚇", layout="wide")
+
+# -------------------- Styles --------------------
 st.markdown("""
 <style>
 :root{ --bg:#0a0f1c; --panel:#0f1630; --ink:#e5ecff; --muted:#9fb2ff; --line:#22305b; --chip:#101a3a;}
@@ -28,13 +29,13 @@ a{color:#7dd3fc}
 </style>
 """, unsafe_allow_html=True)
 
-# ---------- Paths ----------
+# -------------------- Paths --------------------
 DATA_DIR = pathlib.Path("data")
 KML_PATH = DATA_DIR / "Movilidad Integrada ZMVM(1).kml"
 CSV_METRO = DATA_DIR / "metro.csv"
 TRIVIA_JSON = DATA_DIR / "trivia.json"
 
-# ---------- Colors ----------
+# -------------------- Colors --------------------
 LINE_COLORS = {
     "L1":"#F05A91","L2":"#0055A5","L3":"#8CC63E","L4":"#00B5E2","L5":"#FFC20E","L6":"#E10600",
     "L7":"#F39C12","L8":"#00A859","L9":"#8B5E3C","L12":"#C8B273","A":"#7F3FBF","B":"#7AC142",
@@ -44,7 +45,7 @@ LINE_COLORS = {
 }
 SERVICE_COLOR = {"METRO":"#ED5480","METROBUS":"#E53935","CABLEBUS":"#26C6DA","TROLEBUS":"#B388FF","TREN LIGERO":"#00A651","SUBURBANO":"#455A64","MEXIBUS":"#C0CA33","RTP":"#90A4AE","OTROS":"#8894c7"}
 
-# ---------- Helpers ----------
+# -------------------- Helpers --------------------
 def _norm(s:str)->str:
     s = s.lower()
     s = s.replace("í","i").replace("á","a").replace("é","e").replace("ó","o").replace("ú","u").replace("ü","u")
@@ -88,7 +89,7 @@ def canonical_line(service: str, name: str) -> str:
     if service=="RTP": return "RTP"
     return None
 
-# ---------- DEMO fallback ----------
+# -------------------- DEMO fallback --------------------
 LINES_DEMO = {
     "L1":["Observatorio","Tacubaya","Juanacatlán","Chapultepec","Sevilla","Insurgentes","Cuauhtémoc","Balderas",
           "Salto del Agua","Isabel la Católica","Pino Suárez","Merced","Candelaria","San Lázaro","Moctezuma",
@@ -104,7 +105,7 @@ def build_graph_demo():
     for n in G.nodes(): G.nodes[n]["is_transfer"] = (G.degree[n]>=3)
     return G, {}
 
-# ---------- KML ----------
+# -------------------- KML --------------------
 KML_NS = {"kml":"http://www.opengis.net/kml/2.2"}
 
 @st.cache_data(show_spinner=False)
@@ -112,7 +113,7 @@ def read_kml_text(path: pathlib.Path) -> str:
     data = path.read_bytes()
     if data[:2]==b"PK":
         with zipfile.ZipFile(io.BytesIO(data)) as zf:
-            name = next((n for n in zf.namelist() if n.lower().endswith(".kml")), None)
+            name=next((n for n in zf.namelist() if n.lower().endswith(".kml")),None)
             if not name: return ""
             return zf.read(name).decode("utf-8","ignore")
     return data.decode("utf-8","ignore")
@@ -132,25 +133,24 @@ def parse_kml_with_services(kml_text: str):
     items=[]; _walk(doc, [], items)
     stations, lines = [], []
     for trail, pm in items:
-        name_el = pm.find("kml:name", KML_NS)
-        pm_name = name_el.text.strip() if name_el is not None and name_el.text else "Placemark"
-        service = detect_service(" / ".join([t for t in trail if t] + [pm_name]))
-        pt = pm.find("kml:Point/kml:coordinates", KML_NS)
-        ls = pm.find("kml:LineString/kml:coordinates", KML_NS)
+        name_el=pm.find("kml:name", KML_NS)
+        pm_name=name_el.text.strip() if name_el is not None and name_el.text else "Placemark"
+        service=detect_service(" / ".join([t for t in trail if t] + [pm_name]))
+        pt=pm.find("kml:Point/kml:coordinates", KML_NS)
+        ls=pm.find("kml:LineString/kml:coordinates", KML_NS)
         if pt is not None:
-            parts = pt.text.strip().split(",")
+            parts=pt.text.strip().split(",")
             if len(parts)>=2:
-                lon, lat = float(parts[0]), float(parts[1])
-                stations.append({"name": pm_name, "lat": lat, "lon": lon, "service": service})
+                lon,lat=float(parts[0]),float(parts[1])
+                stations.append({"name":pm_name,"lat":lat,"lon":lon,"service":service})
         elif ls is not None:
             coords=[]
             for chunk in ls.text.replace("\n"," ").split():
                 parts=chunk.split(",")
                 if len(parts)>=2:
-                    lon, lat = float(parts[0]), float(parts[1])
+                    lon,lat=float(parts[0]),float(parts[1])
                     coords.append((lat,lon))
-            if coords:
-                lines.append({"name": pm_name, "coords": coords, "service": service})
+            if coords: lines.append({"name":pm_name,"coords":coords,"service":service})
     return stations, lines
 
 def snap_lines_to_stations(stations: List[Dict], lines: List[Dict], snap_threshold_m=150.0):
@@ -170,28 +170,28 @@ def snap_lines_to_stations(stations: List[Dict], lines: List[Dict], snap_thresho
             if d<=snap_threshold_m and (not seq or seq[-1]!=n): seq.append(n)
         for u,v in zip(seq[:-1], seq[1:]):
             if u!=v:
-                su = stations[names.index(u)]; sv = stations[names.index(v)]
-                dist_m = hav_km((su["lat"],su["lon"]),(sv["lat"],sv["lon"])) * 1000.0
-                code = canonical_line(L["service"], L["name"])
-                edges.append((u, v, dist_m, code, L["service"]))
+                su=stations[names.index(u)]; sv=stations[names.index(v)]
+                dist_m=hav_km((su["lat"],su["lon"]),(sv["lat"],sv["lon"])) * 1000.0
+                code=canonical_line(L["service"], L["name"])
+                edges.append((u,v,dist_m,code,L["service"]))
     return edges
 
 def build_graph_from_edges(stations: List[Dict], edges):
     G = nx.Graph()
-    used = set([u for u,_,_,_,_ in edges] + [v for _,v,_,_,_ in edges])
+    used=set([u for u,_,_,_,_ in edges] + [v for _,v,_,_,_ in edges])
     for s in stations:
         if s["name"] in used: G.add_node(s["name"], lat=s["lat"], lon=s["lon"])
     for u,v,w,code,svc in edges:
         if not (G.has_node(u) and G.has_node(v)): continue
         if G.has_edge(u,v):
-            G[u][v]["length_m"] = min(G[u][v]["length_m"], w)
+            G[u][v]["length_m"]=min(G[u][v]["length_m"], w)
             if code: G[u][v].setdefault("lines", set()).add(code)
         else:
             G.add_edge(u,v,length_m=float(w), lines=set([code]) if code else set(), service=svc)
-    for n in G.nodes(): G.nodes[n]["is_transfer"] = (G.degree[n] >= 3)
+    for n in G.nodes(): G.nodes[n]["is_transfer"]=(G.degree[n]>=3)
     return G
 
-# ---------- CSV Metro: longitudes ----------
+# -------------------- CSV Metro --------------------
 def _normalize_cols(df: pd.DataFrame) -> pd.DataFrame:
     cols=[]
     for c in df.columns:
@@ -211,46 +211,36 @@ def merge_lengths_from_csv(G: nx.Graph, csv_path: pathlib.Path) -> int:
         s=str(x).replace(",","").replace(" m","").strip()
         try: return float(s)
         except: return np.nan
-    df["__m__"] = df[len_col].apply(to_m) if len_col else np.nan
-    cnt = 0
+    df["__m__"]=df[len_col].apply(to_m) if len_col else np.nan
+    cnt=0
     for _,r in df.dropna(subset=["__m__"]).iterrows():
-        u, v = str(r["origen"]).strip(), str(r["destino"]).strip()
+        u,v=str(r["origen"]).strip(), str(r["destino"]).strip()
         if G.has_edge(u,v):
-            G[u][v]["length_m"] = float(r["__m__"]); cnt += 1
+            G[u][v]["length_m"]=float(r["__m__"]); cnt+=1
     return cnt
 
-# ---------- Trivia ----------
+# -------------------- Trivia --------------------
 def load_trivia():
-    if TRIVIA_JSON.exists():
-        try:
-            return json.loads(TRIVIA_JSON.read_text(encoding="utf-8"))
-        except Exception:
-            pass
-    # ejemplos base (puedes editarlos en data/trivia.json)
+    p = DATA_DIR / "trivia.json"
+    if p.exists():
+        try: return json.loads(p.read_text(encoding="utf-8"))
+        except Exception: pass
     return [
-        {"title":"Aventura en patrulla", "type":"anécdota",
-         "station":"Terminal Aérea", "service":"METRO",
-         "text":"Se dice que al tiktoker JEZZINI lo tuvieron que llevar en patrulla por una inundación cerca de Terminal Aérea.",
-         "source":"aportado por usuario", "verificado": False},
-        {"title":"Rescate en moto", "type":"anécdota",
-         "station":"Auditorio", "service":"METRO",
-         "text":"Otra vez, por lluvia fuerte, lo transportaron en moto cerca de Auditorio Nacional.",
-         "source":"aportado por usuario", "verificado": False},
-        {"title":"La señora ‘cara de perro’", "type":"leyenda",
-         "station":"Merced", "service":"METRO",
-         "text":"Leyenda urbana: aparece una señora con ‘cara de perro’ en la estación Merced.",
-         "source":"folklore urbano", "verificado": False},
-        {"title":"OVNIs en CU", "type":"leyenda",
-         "station":"Universidad", "service":"METRO",
-         "text":"Historias de luces raras/OVNIs cerca de CU y la terminal del Metro.",
-         "source":"folklore urbano", "verificado": False},
+        {"title":"Aventura en patrulla","type":"anécdota","station":"Terminal Aérea","service":"METRO",
+         "text":"Cuentan que al tiktoker JEZZINI lo llevaron en patrulla por una inundación cerca de Terminal Aérea.",
+         "source":"aporte de usuario","verificado":False},
+        {"title":"Rescate en moto","type":"anécdota","station":"Auditorio","service":"METRO",
+         "text":"Por lluvia fuerte fue transportado en moto cerca de Auditorio Nacional.","source":"aporte de usuario","verificado":False},
+        {"title":"La señora ‘cara de perro’","type":"leyenda","station":"Merced","service":"METRO",
+         "text":"Leyenda urbana famosa asociada a la estación Merced.","source":"folklore urbano","verificado":False},
+        {"title":"OVNIs en CU","type":"leyenda","station":"Universidad","service":"METRO",
+         "text":"Relatos de avistamientos extraños cerca de CU.","source":"folklore urbano","verificado":False}
     ]
 
 def trivia_for_path(trivia_list, path):
-    stns = set(path or [])
-    return [t for t in trivia_list if (t.get("station") in stns)]
+    stns=set(path or []); return [t for t in trivia_list if (t.get("station") in stns)]
 
-# ---------- Build graph (with service filter) ----------
+# -------------------- Build graph (filtered) --------------------
 @st.cache_data(show_spinner=True)
 def build_graph_filtered(services_selected: List[str], snap_threshold_m: float = 150.0):
     if KML_PATH.exists():
@@ -267,9 +257,9 @@ def build_graph_filtered(services_selected: List[str], snap_threshold_m: float =
     G, coords = build_graph_demo()
     return G, coords, G.number_of_nodes(), G.number_of_edges()
 
-# ---------- Metrics & routing ----------
+# -------------------- Metrics & routing --------------------
 def compute_metrics(G: nx.Graph, path: List[str], base_min=2.0, transfer_penalty=5.0, speed_kmh=32.0):
-    e = list(zip(path[:-1], path[1:])); dist=0.0; seq=[]
+    e=list(zip(path[:-1], path[1:])); dist=0.0; seq=[]
     for u,v in e:
         w=G[u][v].get("length_m", np.nan); dist += 0 if np.isnan(w) else w
         lnset=G[u][v].get("lines"); seq.append(sorted(lnset)[0] if isinstance(lnset,set) and lnset else None)
@@ -282,7 +272,7 @@ def compute_metrics(G: nx.Graph, path: List[str], base_min=2.0, transfer_penalty
         transfers=sum(1 for n in path[1:-1] if G.nodes[n].get("is_transfer",False))
     t_dist=(dist/1000.0)/speed_kmh*60.0 if dist>0 else np.nan
     t_fb=base_min*len(e)+transfer_penalty*transfers
-    t = t_dist if not np.isnan(t_dist) else t_fb
+    t=t_dist if not np.isnan(t_dist) else t_fb
     return {"edges":len(e),"transfers":transfers,"dist_km":round(dist/1000.0,2) if dist>0 else None,"time_min":round(t,1),"lines_seq":seq}
 
 def enumerate_paths_worst(G: nx.Graph, src: str, dst: str, mode: str, cutoff: int, limit_paths: int, base_min: float, transfer_penalty: float, speed_kmh: float):
@@ -297,11 +287,11 @@ def enumerate_paths_worst(G: nx.Graph, src: str, dst: str, mode: str, cutoff: in
         s = m["time_min"] if mode=="Más tiempo" else m["transfers"] if mode=="Más transbordos" else m["edges"] if mode=="Más estaciones" else (m["dist_km"] or 0)
         scored.append((s,p,m))
     scored.sort(key=lambda x:x[0], reverse=True)
-    top = scored[:min(10, len(scored))]
-    df = pd.DataFrame([{"rank":i+1,"score":s,"tiempo_min":m["time_min"],"transbordos":m["transfers"],"estaciones":m["edges"],"dist_km":m["dist_km"],"ruta":" → ".join(p)} for i,(s,p,m) in enumerate(top)])
+    top=scored[:min(10,len(scored))]
+    df=pd.DataFrame([{"rank":i+1,"score":s,"tiempo_min":m["time_min"],"transbordos":m["transfers"],"estaciones":m["edges"],"dist_km":m["dist_km"],"ruta":" → ".join(p)} for i,(s,p,m) in enumerate(top)])
     return scored[0][1], scored[0][2], [p for _,p,_ in scored[:5]], df
 
-# ---------- Layouts (sin SciPy) ----------
+# -------------------- Layout helpers (no SciPy) --------------------
 def get_layout(G: nx.Graph, method: str):
     try:
         if method=="Kamada-Kawai": return nx.kamada_kawai_layout(G)
@@ -310,97 +300,142 @@ def get_layout(G: nx.Graph, method: str):
     except Exception:
         return nx.random_layout(G, seed=42)
 
-def plot_topological(G: nx.Graph, highlight: List[str], hide_lines: List[str], layout_method: str):
-    pos = get_layout(G, layout_method)
+def subgraph_path_neighborhood(G: nx.Graph, path: List[str], hops:int):
+    keep=set(path or [])
+    for n in list(keep):
+        dists=nx.single_source_shortest_path_length(G, n, cutoff=hops)
+        keep.update(dists.keys())
+    SG=G.subgraph(sorted(keep)).copy()
+    return SG
+
+# -------------------- Plot (decluttered) --------------------
+def plot_topological(
+    G: nx.Graph,
+    highlight: List[str],
+    layout_method: str,
+    view_mode: str,
+    hops_radius: int,
+    show_only_lines: List[str],
+    label_mode: str,
+):
+    if view_mode=="Vecindario de ruta" and highlight and len(highlight)>=2:
+        GG=subgraph_path_neighborhood(G, highlight, hops_radius)
+    elif view_mode=="Sólo líneas" and show_only_lines:
+        edges=[(u,v) for u,v,d in G.edges(data=True) if any(ln in show_only_lines for ln in (d.get("lines") or set()))]
+        keep=set([n for e in edges for n in e])
+        GG=G.subgraph(sorted(keep)).copy()
+    else:
+        GG=G
+
+    pos=get_layout(GG, layout_method)
+
+    # node labels mode
+    if label_mode=="Todas":
+        def labeler(n): return n
+    elif label_mode=="Ruta + transbordos":
+        hl=set(highlight or [])
+        def labeler(n): return n if (n in hl or GG.degree[n]>=3) else ""
+    else:
+        def labeler(n): return ""
+
+    # draw edges grouped by line/service
     groups={}
-    for u,v,d in G.edges(data=True):
+    for u,v,d in GG.edges(data=True):
         ln = (sorted(d.get("lines"))[0] if d.get("lines") else None)
-        svc = d.get("service","OTROS")
-        key = ln or svc
+        svc=d.get("service","OTROS")
+        key=ln or svc
         groups.setdefault(key, []).append((u,v,ln,svc))
-    fig = go.Figure()
+
+    fig=go.Figure()
+    in_route=set(zip(highlight[:-1], highlight[1:])) if highlight else set()
+
     for key, ev in groups.items():
-        if hide_lines and key in hide_lines: continue
-        color = LINE_COLORS.get(key, SERVICE_COLOR.get(ev[0][3], LINE_COLORS["DEFAULT"]))
         xs,ys=[],[]
         for (u,v,_,_) in ev:
             xs += [pos[u][0], pos[v][0], None]
             ys += [pos[u][1], pos[v][1], None]
-        fig.add_trace(go.Scatter(x=xs,y=ys,mode="lines",line=dict(width=3,color=color),name=key,hoverinfo="none"))
+        color = LINE_COLORS.get(key, SERVICE_COLOR.get(ev[0][3], LINE_COLORS["DEFAULT"]))
+        # attenuate non-route if showing ALL
+        opacity = 0.25 if (view_mode=="Todos" and not any(((u,v) in in_route or (v,u) in in_route) for (u,v,_,_) in ev)) else 0.95
+        width = 2 if opacity<0.9 else 3
+        fig.add_trace(go.Scatter(x=xs,y=ys,mode="lines",line=dict(width=width,color=color),name=key,hoverinfo="none",opacity=opacity))
+
     node_x,node_y,texts=[],[],[]
-    for n in G.nodes():
-        node_x.append(pos[n][0]); node_y.append(pos[n][1]); texts.append(n)
+    for n in GG.nodes():
+        node_x.append(pos[n][0]); node_y.append(pos[n][1]); texts.append(labeler(n))
+    sizes=[12 if GG.degree[n]>=3 else 9 for n in GG.nodes()]
     fig.add_trace(go.Scatter(x=node_x,y=node_y,mode="markers+text",
-        marker=dict(size=10, line=dict(width=1,color="#0d1329")),
-        text=[t if (not highlight or t in highlight) else "" for t in texts],
-        textposition="top center", hovertext=texts, hoverinfo="text"))
+        marker=dict(size=sizes, line=dict(width=1,color="#0d1329")),
+        text=texts, textposition="top center", hovertext=list(GG.nodes()), hoverinfo="text"))
+
     if highlight and len(highlight)>1:
         hx,hy=[],[]
         for u,v in zip(highlight[:-1], highlight[1:]):
-            hx += [pos[u][0], pos[v][0], None]
-            hy += [pos[u][1], pos[v][1], None]
-        fig.add_trace(go.Scatter(x=hx,y=hy,mode="lines",line=dict(width=7,dash="dot",color="#ffffff"),name="Ruta"))
+            if u in GG and v in GG:
+                hx += [pos[u][0], pos[v][0], None]
+                hy += [pos[u][1], pos[v][1], None]
+        fig.add_trace(go.Scatter(x=hx,y=hy,mode="lines",
+            line=dict(width=7,dash="dot",color="#ffffff"),name="Ruta"))
+
     fig.update_layout(showlegend=True,height=640,margin=dict(l=10,r=10,t=10,b=10),
                       xaxis=dict(visible=False),yaxis=dict(visible=False),
                       paper_bgcolor="#0a0f1c",plot_bgcolor="#0a0f1c")
     st.plotly_chart(fig, use_container_width=True, theme=None)
 
-def plot_geo(path: List[str], coords: Dict[str,Tuple[float,float]], step:int=None):
-    if not path or not coords: st.info("Carga KML para mapa geográfico."); return
-    if not all(s in coords and coords[s][0] and coords[s][1] for s in path): st.info("Faltan coords para alguna estación."); return
-    pts=[{"name":s,"lat":coords[s][0],"lon":coords[s][1]} for s in path[:(step or len(path))]]
-    segs=[]
-    for u,v in zip(path[:(step or len(path))][:-1], path[:(step or len(path))][1:]):
-        a,b=coords[u],coords[v]; segs.append({"path":[[a[1],a[0]],[b[1],b[0]]]})
-    view=pdk.ViewState(latitude=pts[0]["lat"], longitude=pts[0]["lon"], zoom=11)
-    layer_pts=pdk.Layer("ScatterplotLayer", data=pts, get_position=["lon","lat"], get_radius=70, pickable=True)
-    layer_path=pdk.Layer("PathLayer", data=segs, get_path="path", get_width=5, get_color=[255,255,255])
-    st.pydeck_chart(pdk.Deck(layers=[layer_path,layer_pts], initial_view_state=view, tooltip={"text":"{name}"}))
-
-# ---------- UI ----------
+# -------------------- UI --------------------
 st.markdown('<div class="block-title">Peores Rutas — CDMX</div>', unsafe_allow_html=True)
-st.markdown('<div class="subtle">Filtra por servicio y calcula la <span class="badge">peor</span> ruta por tiempo, transbordos, estaciones o distancia. Incluye trivias divertidas en tu trayecto.</div>', unsafe_allow_html=True)
+st.markdown('<div class="subtle">Usa <span class="badge">vistas</span> y <span class="badge">etiquetas</span> para un grafo claro y sin amontonamientos.</div>', unsafe_allow_html=True)
 
 with st.sidebar:
     st.markdown("### 🚦 Servicios incluidos")
-    services_all = ["METRO","METROBUS","CABLEBUS","TROLEBUS","TREN LIGERO","SUBURBANO","MEXIBUS","RTP"]
-    services_sel = st.multiselect("Selecciona servicios", services_all, default=["METRO"])
-    snap_m = st.slider("Encaje KML→estación (m)", 60, 300, 150, 10)
+    services_all=["METRO","METROBUS","CABLEBUS","TROLEBUS","TREN LIGERO","SUBURBANO","MEXIBUS","RTP"]
+    services_sel=st.multiselect("Selecciona servicios", services_all, default=["METRO"])
+    snap_m=st.slider("Encaje KML→estación (m)", 60, 300, 150, 10)
     st.markdown("### ⚙️ Parámetros")
-    speed_kmh = st.slider("Velocidad (km/h)", 24, 45, 32)
-    base_min = st.slider("Minutos por tramo (fallback)", 1.0, 5.0, 2.0, .5)
-    penalty = st.slider("Penalización por transbordo (min)", 1.0, 12.0, 5.0, .5)
-    cutoff = st.slider("Máx. estaciones por ruta", 10, 60, 28, 1)
-    limitp = st.slider("Máx. rutas a evaluar", 200, 3000, 1200, 100)
-    layout_method = st.selectbox("Layout del grafo", ["Kamada-Kawai","Circular","Random"])
+    speed_kmh=st.slider("Velocidad (km/h)", 24, 45, 32)
+    base_min=st.slider("Minutos por tramo (fallback)", 1.0, 5.0, 2.0, .5)
+    penalty=st.slider("Penalización por transbordo (min)", 1.0, 12.0, 5.0, .5)
+    cutoff=st.slider("Máx. estaciones por ruta", 10, 60, 28, 1)
+    limitp=st.slider("Máx. rutas a evaluar", 200, 3000, 1200, 100)
+
+    st.markdown("### 🗺️ Vista del grafo")
+    layout_method=st.selectbox("Layout", ["Kamada-Kawai","Circular","Random"])
+    view_mode=st.selectbox("Vista", ["Todos","Vecindario de ruta","Sólo líneas"])
+    hops_radius=st.slider("Radio (hops) para vecindario", 1, 6, 3) if view_mode=="Vecindario de ruta" else 0
+    show_only_lines=[]
+    if view_mode=="Sólo líneas":
+        # se rellenará tras construir el grafo
+        st.caption("Elige líneas abajo (después de construir la red).")
 
 G, coords, n_stations, n_edges = build_graph_filtered(services_sel, snap_threshold_m=snap_m)
 if G.number_of_nodes()==0:
     st.error("No se pudo construir la red. Verifica data/Movilidad Integrada ZMVM(1).kml y data/metro.csv")
     st.stop()
 
-all_line_codes = sorted({ln for _,_,d in G.edges(data=True) for ln in (d.get("lines") or set()) if ln})
-hide_lines = st.sidebar.multiselect("🎨 Ocultar líneas", all_line_codes, [])
+all_line_codes=sorted({ln for _,_,d in G.edges(data=True) for ln in (d.get("lines") or set()) if ln})
+if view_mode=="Sólo líneas":
+    show_only_lines=st.sidebar.multiselect("Líneas a mostrar", all_line_codes, default=all_line_codes[:3])
 
-stations_all = sorted(G.nodes())
-if "src" not in st.session_state: st.session_state["src"] = stations_all[0]
-if "dst" not in st.session_state: st.session_state["dst"] = stations_all[min(1, len(stations_all)-1)]
+label_mode=st.sidebar.selectbox("Etiquetas", ["Ruta + transbordos","Todas","Ninguna"])
 
-c1,c2,c3,c4,c5 = st.columns([2,2,2,2,1])
+stations_all=sorted(G.nodes())
+if "src" not in st.session_state: st.session_state["src"]=stations_all[0]
+if "dst" not in st.session_state: st.session_state["dst"]=stations_all[min(1,len(stations_all)-1)]
+
+c1,c2,c3,c4,c5=st.columns([2,2,2,2,1])
 with c1:
-    src = st.selectbox("Origen", stations_all, index=stations_all.index(st.session_state["src"]) if st.session_state["src"] in stations_all else 0, key="src")
+    src=st.selectbox("Origen", stations_all, index=stations_all.index(st.session_state["src"]) if st.session_state["src"] in stations_all else 0, key="src")
 with c2:
-    dst = st.selectbox("Destino", stations_all, index=stations_all.index(st.session_state["dst"]) if st.session_state["dst"] in stations_all else min(1,len(stations_all)-1), key="dst")
+    dst=st.selectbox("Destino", stations_all, index=stations_all.index(st.session_state["dst"]) if st.session_state["dst"] in stations_all else min(1,len(stations_all)-1), key="dst")
 with c3:
-    mode = st.radio("Criterio", ["Más tiempo","Más transbordos","Más estaciones","Más distancia"], horizontal=True)
+    mode=st.radio("Criterio", ["Más tiempo","Más transbordos","Más estaciones","Más distancia"], horizontal=True)
 with c4:
-    anim = st.toggle("Animación", value=True)
+    anim=st.toggle("Animación", value=True)
 with c5:
-    btn_random = st.button("🎲")
-    if btn_random:
-        st.session_state["src"] = random.choice(stations_all)
-        st.session_state["dst"] = random.choice([s for s in stations_all if s!=st.session_state["src"]])
-        st.experimental_rerun()
+    if st.button("🎲"):
+        st.session_state["src"]=random.choice(stations_all)
+        st.session_state["dst"]=random.choice([s for s in stations_all if s!=st.session_state["src"]])
+        st.rerun()
 
 st.markdown(
     f"<div class='kpi card'>"
@@ -411,7 +446,7 @@ st.markdown(
     f"</div>", unsafe_allow_html=True
 )
 
-btn_calc = st.button("🔎 Calcular peor ruta", type="primary", use_container_width=True)
+btn_calc=st.button("🔎 Calcular peor ruta", type="primary", use_container_width=True)
 
 if btn_calc:
     if st.session_state["src"]==st.session_state["dst"]:
@@ -424,7 +459,7 @@ if btn_calc:
         if not path:
             st.error("No encontré rutas con los parámetros actuales.")
         else:
-            a,b = st.columns([3,2])
+            a,b=st.columns([3,2])
             with a:
                 st.markdown(f"<div class='badge'>Ruta ({mode})</div>", unsafe_allow_html=True)
                 st.markdown("**" + " → ".join(path) + "**")
@@ -435,34 +470,46 @@ if btn_calc:
                     (f"- 📏 **{met['dist_km']} km**" if met.get('dist_km') else "")
                 )
             with b:
-                chips=[]
-                for ln in met["lines_seq"]:
-                    if ln: chips.append(f"<span class='badge' style='border-color:#2a3a77'>{ln}</span>")
+                chips=[f"<span class='badge' style='border-color:#2a3a77'>{ln}</span>" for ln in met["lines_seq"] if ln]
                 st.markdown("**Líneas**")
                 st.markdown((" ".join(chips)) if chips else "<span class='subtle'>sin etiquetas</span>", unsafe_allow_html=True)
                 st.download_button("⬇️ Ruta CSV",
                     pd.DataFrame({"paso":range(1,len(path)+1),"estacion":path}).to_csv(index=False).encode("utf-8"),
                     "ruta.csv","text/csv")
 
-            tabs = st.tabs(["🕸️ Topológico","🗺️ Geográfico","🏆 Top 10 peores","🎭 Trivias en la ruta"])
+            tabs=st.tabs(["🕸️ Topológico","🗺️ Geográfico","🏆 Top 10 peores","🎭 Trivias en la ruta"])
             with tabs[0]:
-                plot_topological(G, highlight=path, hide_lines=hide_lines, layout_method=layout_method)
+                plot_topological(
+                    G, highlight=path, layout_method=layout_method,
+                    view_mode=view_mode, hops_radius=hops_radius,
+                    show_only_lines=show_only_lines, label_mode=label_mode
+                )
             with tabs[1]:
                 step = st.slider("Paso", 1, len(path), len(path)) if anim else len(path)
-                plot_geo(path, coords, step=step)
+                # mapa geográfico
+                coords_map={n:(G.nodes[n].get("lat"), G.nodes[n].get("lon")) for n in G.nodes()}
+                if not all(s in coords_map and coords_map[s][0] and coords_map[s][1] for s in path):
+                    st.info("Faltan coordenadas en el KML para alguna estación de esta ruta.")
+                else:
+                    pts=[{"name":s,"lat":coords_map[s][0],"lon":coords_map[s][1]} for s in path[:(step or len(path))]]
+                    segs=[]; 
+                    for u,v in zip(path[:(step or len(path))][:-1], path[:(step or len(path))][1:]):
+                        a,b=coords_map[u],coords_map[v]; segs.append({"path":[[a[1],a[0]],[b[1],b[0]]]})
+                    view=pdk.ViewState(latitude=pts[0]["lat"], longitude=pts[0]["lon"], zoom=11)
+                    layer_pts=pdk.Layer("ScatterplotLayer", data=pts, get_position=["lon","lat"], get_radius=70, pickable=True)
+                    layer_path=pdk.Layer("PathLayer", data=segs, get_path="path", get_width=5, get_color=[255,255,255])
+                    st.pydeck_chart(pdk.Deck(layers=[layer_path,layer_pts], initial_view_state=view, tooltip={"text":"{name}"}))
             with tabs[2]:
                 st.dataframe(df_top, use_container_width=True)
             with tabs[3]:
-                trivia_list = load_trivia()
-                rel = trivia_for_path(trivia_list, path)
-                if not rel:
-                    st.info("No hay trivias asociadas a estaciones de esta ruta. Agrega más en data/trivia.json.")
+                trivia_list=load_trivia(); rel=trivia_for_path(trivia_list, path)
+                if not rel: st.info("No hay trivias en esta ruta. Agrega más en data/trivia.json.")
                 else:
                     for t in rel:
-                        verif = "✅" if t.get("verificado") else "🌀"
+                        verif="✅" if t.get("verificado") else "🌀"
                         st.markdown(f"**{t['title']}** {verif} — *{t.get('type','')}, {t.get('service','')}*  \n"
                                     f"**Estación:** {t.get('station','—')}  \n"
                                     f"{t.get('text','')}  \n"
                                     f"<span class='subtle'>Fuente: {t.get('source','—')}</span>", unsafe_allow_html=True)
 else:
-    st.info("Elige origen/destino, ajusta parámetros y pulsa **Calcular peor ruta**.")
+    st.info("Elige origen/destino, pulsa **Calcular peor ruta** y usa la vista **Vecindario de ruta** o **Sólo líneas** para despejar el grafo.")
